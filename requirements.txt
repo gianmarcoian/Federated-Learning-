@@ -5,4 +5,4 @@ Pillow
 numpy
 torchvision
 matplotlib
-mlcollections    
+ml_collections    
