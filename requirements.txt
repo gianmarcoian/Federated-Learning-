@@ -1,0 +1,8 @@
+flask
+docker
+torch
+Pillow
+numpy
+torchvision
+matplotlib
+mlcollections    
