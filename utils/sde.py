@@ -1,20 +1,48 @@
+import abc
+import torch
+import numpy as np
+
+
+class SDE(abc.ABC):
+
+  def __init__(self, N):
+
+    super().__init__()
+    self.N = N
+
+  @property
+  @abc.abstractmethod
+  def T(self):
+    pass
+
+  @abc.abstractmethod
+  def sde(self, x, t):
+    pass
+
+  @abc.abstractmethod
   def marginal_prob(self, x, t):
-    std = self.sigma_min * (self.sigma_max / self.sigma_min) ** t
-    mean = x
-    return mean, std
+    pass
 
+  @abc.abstractmethod
   def prior_sampling(self, shape):
-    return torch.randn(*shape) * self.sigma_max
+    pass
 
+  @abc.abstractmethod
   def prior_logp(self, z):
-    shape = z.shape
-    N = np.prod(shape[1:])
-    return -N / 2. * np.log(2 * np.pi * self.sigma_max ** 2) - torch.sum(z ** 2, dim=(1, 2, 3)) / (2 * self.sigma_max ** 2)
+
+    pass
 
   def discretize(self, x, t):
-    timestep = (t * (self.N - 1) / self.T).long()
-    sigma = self.discrete_sigmas.to(t.device)[timestep]
-    adjacent_sigma = torch.where(timestep == 0, torch.zeros_like(t),
-                                 self.discrete_sigmas[timestep - 1].to(t.device))
-    f = torch.zeros_like(x)
-    G = torch.sqrt(sigma ** 2 - adjacent_sigma ** 2)
+
+    dt = 1 / self.N
+    drift, diffusion = self.sde(x, t)
+    f = drift * dt
+    G = diffusion * torch.sqrt(torch.tensor(dt, device=t.device))
+    return f, G
+
+  def reverse(self, score_fn, probability_flow=False):
+
+    N = self.N
+    T = self.T
+    sde_fn = self.sde
+    discretize_fn = self.discretize
