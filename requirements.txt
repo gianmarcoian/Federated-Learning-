@@ -5,4 +5,6 @@ Pillow
 numpy
 torchvision
 matplotlib
-ml_collections    
+ml_collections
+lpips
+scikit-learn==1.0.2
