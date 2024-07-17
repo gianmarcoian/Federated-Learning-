@@ -9,42 +9,97 @@ import io
 from PIL import Image
 import copy
 from torch.utils.data import DataLoader, Dataset
+import logging
+
+
 
 from utils.datasets import CustomDatasetWithLabelsList, CustomDataset
-from utils.network import CNN
+from utils.network import CNN, DDPM
 from utils.utils import run_model, run_monte_carlo, train_model, save_model, \
     validate_model, train_model_with_fedprox, model_to_hex, federated_average, \
-    save_and_load_hex_model
+    save_and_load_hex_model, image_transf, image_transf_cl
+from utils.configs import get_default_configs
+from utils.recon import run_recon
+from utils.detect import detect
 
+
+config = get_default_configs()
+
+'''
+class FederatedLearningServer(Flask):
+    def __init__(self, *args, **kwargs):
+        super(FederatedLearningServer, self).__init__(*args, **kwargs)
+        self.model = CNN()
+        try:
+            logger.debug('Inizializzazione del modello DDPM')
+            self.model_novelty = DDPM(config)
+        except TypeError as e:
+            logger.error(f'Errore durante l\'inizializzazione di DDPM: {e}')
+            raise
+        # Check if current_model.pth exists and load it
+        if os.path.exists("current_model.pth"):
+            self.model.load_state_dict(torch.load("current_model.pth"))
+        if os.path.exists("checkpoint_10.pth"): 
+            self.model_novelty.load_state_dict(torch.load("checkpoint_10.pth")['model'])
+'''
+def remove_module_prefix(state_dict):
+    new_state_dict = {}
+    for k, v in state_dict.items():
+        if k.startswith('module.'):
+            new_state_dict[k[7:]] = v
+        else:
+            new_state_dict[k] = v
+    return new_state_dict
 
 class FederatedLearningServer(Flask):
     def __init__(self, *args, **kwargs):
         super(FederatedLearningServer, self).__init__(*args, **kwargs)
         self.model = CNN()
-        # Check if current_model.pth exists and load it
         if os.path.exists("current_model.pth"):
             self.model.load_state_dict(torch.load("current_model.pth"))
-
-
+        '''
+        # Carica il checkpoint
+        if os.path.exists("checkpoint_10.pth"):
+            checkpoint = torch.load("checkpoint_10.pth")
+            state_dict = remove_module_prefix(checkpoint['model'])
+            #print("Keys in state_dict after removing prefix:", state_dict.keys())  
+            try:
+                self.model_novelty.load_state_dict(state_dict, strict=False)
+            except RuntimeError as e:
+                logger.error(f'Errore durante il caricamento del modello DDPM: {e}')
+                raise
+        '''    
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 app = FederatedLearningServer(__name__)
-
 
 @app.route('/infer', methods=['POST'])
 def infer():
-    image = request.files['image'].read()
-    transform = transforms.Compose(
-        [transforms.Grayscale(), transforms.ToTensor()]
-    )
-    image = Image.open(io.BytesIO(image))
-    image = transform(image).unsqueeze(0)
-    prediction = run_model(image, app.model)
-    return jsonify(
-        {
-            'prediction': prediction[1],
-            'confidence': prediction[0]
-        }
-    )
+    logger.info('Ricevuta richiesta per /infer')
+    try:
+        image_in_p = request.files['image_in'].read()
+        image_out_p = request.files['image_out'].read()
 
+        image_in,image_out= image_transf(image_in_p,image_out_p)
+        image_out_class= image_transf_cl(image_out_p)
+        #classification
+        prediction = run_model(image_out_class, app.model)
+        #detection
+        run_recon(image_in,image_out, config)
+        is_ood = bool(detect())
+        return jsonify({'prediction': prediction[1], 'is_ood': is_ood})
+    
+    except Exception as e:
+        logger.error(f'error occured during inference: {e}')
+        return jsonify({'error': str(e)}), 500
+
+
+'''
+@app.route('/train_ddpm', methods=['POST'])
+def train_ddpm():
+    run_ddp_training(app.model_novelty)
+    return jsonify({'training processing...'})
+    
 
 
 @app.route('/train-worker-directory', methods=['POST'])
@@ -194,10 +249,11 @@ def get_model():
     hex_model = model_to_hex(app.model)
     return jsonify({'model': hex_model})
 
-
+'''
 if __name__ == '__main__':
     random.seed(0)
     np.random.seed(0)
     torch.manual_seed(0)
 
-    app.run(host='0.0.0.0', port=8000)
+    app.run(host='0.0.0.0', port=8000,debug=True)
+
