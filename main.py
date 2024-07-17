@@ -25,23 +25,7 @@ from utils.detect import detect
 
 config = get_default_configs()
 
-'''
-class FederatedLearningServer(Flask):
-    def __init__(self, *args, **kwargs):
-        super(FederatedLearningServer, self).__init__(*args, **kwargs)
-        self.model = CNN()
-        try:
-            logger.debug('Inizializzazione del modello DDPM')
-            self.model_novelty = DDPM(config)
-        except TypeError as e:
-            logger.error(f'Errore durante l\'inizializzazione di DDPM: {e}')
-            raise
-        # Check if current_model.pth exists and load it
-        if os.path.exists("current_model.pth"):
-            self.model.load_state_dict(torch.load("current_model.pth"))
-        if os.path.exists("checkpoint_10.pth"): 
-            self.model_novelty.load_state_dict(torch.load("checkpoint_10.pth")['model'])
-'''
+
 def remove_module_prefix(state_dict):
     new_state_dict = {}
     for k, v in state_dict.items():
@@ -58,7 +42,6 @@ class FederatedLearningServer(Flask):
         if os.path.exists("current_model.pth"):
             self.model.load_state_dict(torch.load("current_model.pth"))
         '''
-        # Carica il checkpoint
         if os.path.exists("checkpoint_10.pth"):
             checkpoint = torch.load("checkpoint_10.pth")
             state_dict = remove_module_prefix(checkpoint['model'])
@@ -69,6 +52,7 @@ class FederatedLearningServer(Flask):
                 logger.error(f'Errore durante il caricamento del modello DDPM: {e}')
                 raise
         '''    
+
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 app = FederatedLearningServer(__name__)
